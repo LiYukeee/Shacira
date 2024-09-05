@@ -17,7 +17,7 @@ dataset:
 
 tracer:
     raymarch_type: 'ray'
-    num_steps: 2048
+    num_steps: 4
 
 grid:
     grid_type: 'LatentGrid'

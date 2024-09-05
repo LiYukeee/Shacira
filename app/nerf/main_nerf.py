@@ -24,6 +24,12 @@ from wisp.tracers import BaseTracer, PackedRFTracer
 from wisp.models.nefs import BaseNeuralField, NeuralRadianceField
 from wisp.models.pipeline import Pipeline
 from wisp.trainers import BaseTrainer, MultiviewTrainer
+import subprocess
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+cmd = 'nvidia-smi -q -d Memory |grep -A4 GPU|grep Used'
+result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE).stdout.decode().split('\n')
+os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmin([int(x.split()[2]) for x in result[:-1]]))
 
 def copy_dir_msrsync(input_dir, num_procs, msrsync_exec, dest_dir=None):
     if dest_dir is None:
@@ -63,7 +69,7 @@ def parse_args():
                         help='Path to config file to replace defaults.')
     parser.add_argument('--profile', action='store_true',
                         help='Enable NVTX profiling')
-    parser.add_argument('--seed', type=int,
+    parser.add_argument('--seed', type=int, default='2024',
                         help='Random seed. (Not implemented)')
     parser.add_argument('--headless', action='store_true',
                         help='Enable NVTX profiling')
@@ -228,7 +234,7 @@ def parse_args():
     wandb_group = parser.add_argument_group('wandb')
     wandb_group.add_argument('--wandb-project', type=str, default=None,
                                help='Weights & Biases Project')
-    wandb_group.add_argument('--wandb-mode', type=str, default='online',
+    wandb_group.add_argument('--wandb-mode', type=str, default='offline',
                                help='Whether to run Weights & Biases in online or offline mode.')
     wandb_group.add_argument('--log-metrics-only', action='store_true',
                                help='Weights & Biases Log metrics only (no images or artifacts).')

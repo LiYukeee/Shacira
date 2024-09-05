@@ -156,7 +156,7 @@ class OfflineRenderer():
         
         rays = Rays(origins=ray_o, dirs=ray_d, dist_min=camera_clamp[0], dist_max=camera_clamp[1])
 
-        rb = self.render(pipeline, rays, lod_idx=lod_idx)
+        rb, _ = self.render(pipeline, rays, lod_idx=lod_idx)
         rb = rb.reshape(self.height, self.width, -1) 
         return rb
 
@@ -179,15 +179,18 @@ class OfflineRenderer():
         with torch.no_grad():
             if self.render_batch > 0:
                 rb = RenderBuffer(xyz=None, hit=None, normal=None, shadow=None, ao=None, dirs=None)
-                for ray_pack in rays.split(self.render_batch):
-                    rb  += pipeline.tracer(pipeline.nef, rays=ray_pack, lod_idx=lod_idx, **self.kwargs)
+                num_samples_list = []
+                for ray_pack in rays.split(self.render_batch):  # 此处将光线分批次处理
+                    rb_temp, num_samples = pipeline.tracer(pipeline.nef, rays=ray_pack, lod_idx=lod_idx, **self.kwargs)
+                    rb += rb_temp
+                    num_samples_list.append(num_samples)
             else:
                 rb = pipeline.tracer(pipeline.nef, rays=rays, lod_idx=lod_idx, **self.kwargs)
 
         ######################
         # Shading Rendering
         ######################
-        
+        num_samples_per_image = sum(num_samples_list)
         # This is executed if the tracer does not handle RGB
         # TODO(ttakikawa): Brittle
         if self.shading_mode == 'rb' and rb.rgb is None: 
@@ -249,7 +252,7 @@ class OfflineRenderer():
         if self.ao:
             rb.rgb[...,:3] *= rb.ao        
         
-        return rb
+        return rb, num_samples_per_image
     
     # TODO(ttakikawa): These are useful functions but probably does not need to live in the renderer. Migrate.
     def normal_slice(self, fn, dim=0, depth=0.0):

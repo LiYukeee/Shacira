@@ -151,8 +151,8 @@ class BaseTracer(WispModule, ABC):
                 if default_arg is not None:
                     input_args[_arg] = default_arg
         with torch.cuda.nvtx.range("Tracer.trace"):
-            rb = self.trace(nef, rays, requested_channels, requested_extra_channels, **input_args)
-        return rb
+            rb, num_samples = self.trace(nef, rays, requested_channels, requested_extra_channels, **input_args)
+        return rb, num_samples
 
     def public_properties(self) -> Dict[str, Any]:
         """ Wisp modules expose their public properties in a dictionary.

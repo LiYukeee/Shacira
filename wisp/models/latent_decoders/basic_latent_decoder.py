@@ -180,7 +180,7 @@ class LatentDecoder(Module):
         return list(self.layers.children())[0].scale.grad.norm()
     
     def forward(self, weight: Tensor) -> Tensor:
-        if self.use_sga:
+        if self.use_sga:  # 训练过程
             weightf = torch.floor(weight) if self.diff_sampling else StraightThroughFloor.apply(weight)
             weightc = weightf+1
             logits_f = -torch.tanh(torch.clamp(weight-weightf, min=-1+epsilon, max=1-epsilon)).unsqueeze(-1)/self.temperature
@@ -189,7 +189,7 @@ class LatentDecoder(Module):
             dist = torch.distributions.relaxed_categorical.RelaxedOneHotCategorical(self.temperature, logits=logits)
             sample = dist.rsample() if self.diff_sampling else dist.sample()
             weight = weightf*sample[...,0]+weightc*sample[...,1]
-        else:
+        else:  # 推理测试过程
             weight = StraightThrough.apply(weight)
         w_out = self.layers(weight/self.div)
         w_out = self.final_activation(w_out)

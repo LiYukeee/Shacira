@@ -9,6 +9,10 @@
 
 import os
 import logging as log
+log.basicConfig(filename='/home/liyuke/liyuke/code/Shacira/runlog.log', 
+                filemode='a',
+                level=log.INFO, 
+                format='%(asctime)s - %(levelname)s - %(message)s')
 from tqdm import tqdm
 import random
 import pandas as pd
@@ -77,7 +81,7 @@ class MultiviewTrainer(BaseTrainer):
             self.log_dict['net_kbytes_codebook'] = 0.0
 
     @torch.cuda.nvtx.range("MultiviewTrainer.step")
-    def step(self, data):
+    def step(self, data):  # train step
         """Implement the optimization over image-space loss.
         """
         # Map to device
@@ -98,7 +102,7 @@ class MultiviewTrainer(BaseTrainer):
             # Sample only the max lod (None is max lod by default)
             lod_idx = None
 
-        rb = self.pipeline(rays=rays, lod_idx=lod_idx, channels=["rgb"])
+        rb, num_samples = self.pipeline(rays=rays, lod_idx=lod_idx, channels=["rgb"])
 
         # RGB Loss
         #rgb_loss = F.mse_loss(rb.rgb, img_gts, reduction='none')
@@ -182,12 +186,13 @@ class MultiviewTrainer(BaseTrainer):
         psnr_total = 0.0
         lpips_total = 0.0
         ssim_total = 0.0
+        num_samples_per_image_list = []
         with torch.no_grad():
             for idx, full_batch in tqdm(enumerate(dataset)):
                 gts = full_batch['rgb'].to('cuda')
                 rays = full_batch['rays'].to('cuda')
-                rb = self.renderer.render(self.pipeline, rays, lod_idx=lod_idx)
-
+                rb, num_samples_per_image = self.renderer.render(self.pipeline, rays, lod_idx=lod_idx)
+                num_samples_per_image_list.append(num_samples_per_image)
                 gts = gts.reshape(*img_shape, -1)
                 rb = rb.reshape(*img_shape, -1)
 
@@ -220,19 +225,19 @@ class MultiviewTrainer(BaseTrainer):
         psnr_total /= img_count
         lpips_total /= img_count
         ssim_total /= img_count
-
+        num_samples_per_image_ave = sum(num_samples_per_image_list) / img_count
         metrics_dict = {"psnr": psnr_total, "ssim": ssim_total}
 
         log_text = 'EPOCH {}/{}'.format(self.epoch, self.max_epochs)
         log_text += ' | {}: {:.2f}'.format(f"{name} PSNR", psnr_total)
         log_text += ' | {}: {:.6f}'.format(f"{name} SSIM", ssim_total)
-
+        log_text += ' | {}: {:.6f}'.format(f"{name} num_samples_per_image_ave", num_samples_per_image_ave)
         if lpips_model:
             log_text += ' | {}: {:.6f}'.format(f"{name} LPIPS", lpips_total)
             metrics_dict["lpips"] = lpips_total
         log.info(log_text)
  
-        return metrics_dict
+        return metrics_dict, num_samples_per_image_ave
 
     def render_final_view(self, num_angles, camera_distance):
         angles = np.pi * 0.1 * np.array(list(range(num_angles + 1)))
@@ -272,7 +277,7 @@ class MultiviewTrainer(BaseTrainer):
                 rgb_gif.save(gif_path, save_all=True, append_images=out_rgb[1:], optimize=False, loop=0)
                 wandb.log({f"360-Degree-Scene/RGB-Rendering/LOD-{d}": wandb.Video(gif_path)})
     
-    def validate(self):
+    def validate(self):  # validate step
         self.pipeline.eval()
 
         # record_dict contains trainer args, but omits torch.Tensor fields which were not explicitly converted to
@@ -306,7 +311,7 @@ class MultiviewTrainer(BaseTrainer):
             else:
                 self.lpips_exception = True
                 log.info("Skipping LPIPS since lpips is not found.")
-        evaluation_results = self.evaluate_metrics(self.validation_dataset, lods[-1],
+        evaluation_results, _ = self.evaluate_metrics(self.validation_dataset, lods[-1],
                                                    f"lod{lods[-1]}", lpips_model=lpips_model)
         record_dict.update(evaluation_results)
         if self.using_wandb:

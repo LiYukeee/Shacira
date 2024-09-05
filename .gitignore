@@ -2,7 +2,6 @@
 *.sw*
 .ipynb_checkpoints
 compile_commands.json
-.vscode
 __pycache__
 sandbox.ipynb
 logs
@@ -17,7 +16,6 @@ wandb/
 data/
 plots/
 slurm_files/
-.vscode/
 val_lego/
 paper_plots/
 _results/
